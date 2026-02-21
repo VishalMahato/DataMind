@@ -22,6 +22,7 @@ from app.api.schemas import (
     TopValue,
 )
 from app.core.chart_renderer import render_charts
+from app.core.llm_engine import generate_insights
 from app.core.trend_engine import build_trend_and_findings
 from app.core.visualizer import generate_charts
 
@@ -231,12 +232,19 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
     charts = generate_charts(df, report_id)
     render_charts(df, report_id, charts)
 
-    # ── Insights (placeholder until LLM engine is wired) ─────
-    insights = InsightPack(
-        executive_insights=[],
-        risks=[],
-        opportunities=[],
-        actions=[],
+    # ── LLM-powered Insights ─────────────────────────────────
+    chart_summaries = [
+        {"chart_type": c.chart_type, "title": c.title}
+        for c in charts
+    ]
+    insights = generate_insights(
+        filename=filename or "uploaded.csv",
+        rows=int(df.shape[0]),
+        columns=int(df.shape[1]),
+        profiling=profiling,
+        trend=trend,
+        wow_findings=trend_findings,
+        chart_summaries=chart_summaries,
     )
 
     return ReportResponse(
