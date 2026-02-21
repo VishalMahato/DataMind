@@ -1,7 +1,9 @@
 import io
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Optional
+from uuid import uuid4
 
 import pandas as pd
 from pandas.api import types as pdt
@@ -147,6 +149,10 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
             },
         }
     report = ReportResponse.parse_obj(base_data)
+    now = datetime.utcnow()
+    report_id = f"rpt_{now:%Y%m%d_%H%M%S}_{uuid4().hex[:6]}"
+    report.report_id = report_id
+    report.generated_at = now.replace(microsecond=0).isoformat() + "Z"
     try:
         df, size_bytes = _read_dataframe(file_obj)
     except Exception:
