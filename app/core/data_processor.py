@@ -16,6 +16,7 @@ from app.api.schemas import (
     ReportResponse,
     TopValue,
 )
+from app.core.visualizer import generate_charts
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -159,7 +160,9 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
     )
     preview = _build_preview(df)
     profiling = _build_profiling(df)
+    charts = generate_charts(df, report.report_id)
     report.dataset_meta = dataset_meta
     report.data_preview = preview
     report.profiling = profiling
+    report.charts = charts
     return report

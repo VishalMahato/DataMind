@@ -1,6 +1,6 @@
 # What’s Done vs What’s Left
 
-Branch: `feat3-profiling`
+Branch: `feat4-charts-deterministic`
 
 ## ✅ What’s Done
 
@@ -31,14 +31,17 @@ Branch: `feat3-profiling`
   - Reads the uploaded CSV into a pandas DataFrame
   - Updates `dataset_meta` (filename, rows, columns, size_bytes, delimiter, encoding)
   - Updates `data_preview` columns and first rows from the real data
- - Real profiling added in `app/core/data_processor.py`:
+- Real profiling added in `app/core/data_processor.py`:
   - Computes `missing_by_column` and `unique_by_column` from the DataFrame
   - Builds `column_profiles` with inferred dtype, numeric stats, outlier summary, and top categorical values
+- Deterministic charts added in `app/core/visualizer.py` and wired via `data_processor`:
+  - Selects main numeric, categorical, and datetime columns from the DataFrame
+  - Generates a line chart (KPI over time), bar chart (KPI by category), and histogram (KPI distribution) with stable ids and titles
 
 ## ⏳ What’s Left (High-Level)
 
 - Backend data/AI logic:
-  - Implement deterministic chart generation (`visualizer.py`) and PNG export via Plotly + Kaleido
+  - Implement PNG export via Plotly + Kaleido for generated charts
   - Implement trend detection (`trend_engine.py`)
   - Implement Azure OpenAI integration (`llm_engine.py`) for insights, risks, opportunities, actions, chat_context
   - Implement HTML report rendering (`report_renderer.py`) and PDF generation (`pdf_generator.py`) using WeasyPrint
