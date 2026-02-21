@@ -1,3 +1,5 @@
+import asyncio
+from functools import partial
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -21,7 +23,10 @@ async def analyze(
             detail={"error": {"code": "INVALID_CSV", "message": "Only .csv files are supported"}},
         )
     try:
-        report = generate_report_from_file(file.file, file.filename)
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(
+            None, partial(generate_report_from_file, file.file, file.filename)
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
