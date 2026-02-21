@@ -1,0 +1,438 @@
+﻿{
+	"report_version": "v1",
+	"report_id": "rpt_20260221_demo1234",
+	"generated_at": "2026-02-21T08:30:00Z",
+	"mode": "boardroom",
+	"dataset_meta": {
+		"filename": "sample.csv",
+		"rows": 5,
+		"columns": 7,
+		"size_bytes": 262,
+		"detected_delimiter": ",",
+		"encoding": "utf-8"
+	},
+	"data_preview": {
+		"columns": [
+			"date",
+			"region",
+			"product",
+			"revenue",
+			"cost",
+			"units",
+			"margin_pct"
+		],
+		"rows": [
+			{
+				"date": "2025-10-01",
+				"region": "North",
+				"product": "A",
+				"revenue": 120000,
+				"cost": 82000,
+				"units": 340,
+				"margin_pct": 31.67
+			},
+			{
+				"date": "2025-10-02",
+				"region": "South",
+				"product": "B",
+				"revenue": 98000,
+				"cost": 74500,
+				"units": 290,
+				"margin_pct": 23.98
+			},
+			{
+				"date": "2025-10-03",
+				"region": "East",
+				"product": "A",
+				"revenue": 110500,
+				"cost": 77000,
+				"units": 310,
+				"margin_pct": 30.32
+			},
+			{
+				"date": "2025-10-04",
+				"region": "West",
+				"product": "C",
+				"revenue": 87500,
+				"cost": 69000,
+				"units": 260,
+				"margin_pct": 21.14
+			},
+			{
+				"date": "2025-10-05",
+				"region": "North",
+				"product": "B",
+				"revenue": 132000,
+				"cost": 91000,
+				"units": 360,
+				"margin_pct": 31.06
+			}
+		]
+	},
+	"cleaning_log": [
+		{
+			"action": "drop_empty_columns",
+			"description": "Dropped 1 empty column",
+			"before": { "columns": 10 },
+			"after": { "columns": 9 }
+		},
+		{
+			"action": "parse_dates",
+			"description": "Parsed 'date' as datetime (ISO)",
+			"before": { "dtype": "string" },
+			"after": { "dtype": "datetime" }
+		},
+		{
+			"action": "fill_missing_numeric",
+			"description": "Filled 22 missing values in 'margin_pct' with median",
+			"before": { "missing": 22 },
+			"after": { "missing": 0 }
+		},
+		{
+			"action": "deduplicate_rows",
+			"description": "Removed 7 duplicate rows",
+			"before": { "rows": 1255 },
+			"after": { "rows": 1248 }
+		}
+	],
+	"profiling": {
+		"missing_by_column": {
+			"date": 0,
+			"region": 0,
+			"product": 0,
+			"revenue": 0,
+			"cost": 0,
+			"units": 0,
+			"margin_pct": 0
+		},
+		"unique_by_column": {
+			"date": 5,
+			"region": 4,
+			"product": 3,
+			"revenue": 5,
+			"cost": 5,
+			"units": 5,
+			"margin_pct": 5
+		},
+		"column_profiles": [
+			{
+				"name": "date",
+				"dtype": "categorical",
+				"stats": null,
+				"outliers": null,
+				"top_value": { "value": "2025-10-01", "count": 1 }
+			},
+			{
+				"name": "region",
+				"dtype": "categorical",
+				"stats": null,
+				"outliers": null,
+				"top_value": { "value": "North", "count": 2 }
+			},
+			{
+				"name": "product",
+				"dtype": "categorical",
+				"stats": null,
+				"outliers": null,
+				"top_value": { "value": "A", "count": 2 }
+			},
+			{
+				"name": "revenue",
+				"dtype": "numeric",
+				"stats": {
+					"min": 87500.0,
+					"max": 132000.0,
+					"mean": 109600.0,
+					"median": 110500.0,
+					"std": 15707.959765672944
+				},
+				"outliers": {
+					"method": "iqr",
+					"count": 0,
+					"lower_bound": 65000.0,
+					"upper_bound": 153000.0
+				},
+				"top_value": null
+			},
+			{
+				"name": "cost",
+				"dtype": "numeric",
+				"stats": {
+					"min": 69000.0,
+					"max": 91000.0,
+					"mean": 78700.0,
+					"median": 77000.0,
+					"std": 7440.430095095309
+				},
+				"outliers": {
+					"method": "iqr",
+					"count": 0,
+					"lower_bound": 63250.0,
+					"upper_bound": 93250.0
+				},
+				"top_value": null
+			},
+			{
+				"name": "units",
+				"dtype": "numeric",
+				"stats": {
+					"min": 260.0,
+					"max": 360.0,
+					"mean": 312.0,
+					"median": 310.0,
+					"std": 35.4400902933387
+				},
+				"outliers": {
+					"method": "iqr",
+					"count": 0,
+					"lower_bound": 215.0,
+					"upper_bound": 415.0
+				},
+				"top_value": null
+			},
+			{
+				"name": "margin_pct",
+				"dtype": "numeric",
+				"stats": {
+					"min": 21.14,
+					"max": 31.67,
+					"mean": 27.633999999999997,
+					"median": 30.32,
+					"std": 4.260636572156795
+				},
+				"outliers": {
+					"method": "iqr",
+					"count": 0,
+					"lower_bound": 13.360000000000003,
+					"upper_bound": 41.67999999999999
+				},
+				"top_value": null
+			}
+		]
+	},
+	"trend": {
+		"available": true,
+		"date_column": "date",
+		"kpi_column": "revenue",
+		"summary": [
+			"Revenue increased 12.4% over the analyzed period, indicating improving top-line performance.",
+			"Margin percentage declined 4.1% in Q3 despite revenue growth, suggesting cost pressure or discounting.",
+			"Revenue volatility rose in late Q3; investigate campaign timing or supply constraints."
+		],
+		"metrics": {
+			"start_value": 96000.0,
+			"end_value": 107904.0,
+			"pct_change": 12.4
+		}
+	},
+	"wow_findings": [
+		{
+			"type": "kpi_conflict",
+			"severity": "high",
+			"title": "Margin declined despite revenue growth",
+			"evidence": "Revenue +12.4% while margin_pct trend -4.1% in Q3",
+			"related_columns": ["revenue", "margin_pct", "cost"]
+		},
+		{
+			"type": "anomaly",
+			"severity": "medium",
+			"title": "Revenue outliers detected",
+			"evidence": "18 revenue outliers via IQR (upper bound 195,000)",
+			"related_columns": ["revenue"]
+		}
+	],
+	"charts": [
+		{
+			"id": "chart_1",
+			"chart_type": "line",
+			"title": "revenue over Time",
+			"reason": "A datetime column and numeric KPI were detected; line chart shows trend.",
+			"x": "date",
+			"y": "revenue",
+			"image_url": "/static/rpt_20260221_demo1234/chart_1.png",
+			"alt": "Line chart of revenue over date.",
+			"width": 960,
+			"height": 480
+		},
+		{
+			"id": "chart_2",
+			"chart_type": "bar",
+			"title": "revenue by region",
+			"reason": "Categorical and numeric columns detected; bar chart compares segments.",
+			"x": "region",
+			"y": "revenue",
+			"image_url": "/static/rpt_20260221_demo1234/chart_2.png",
+			"alt": "Bar chart of revenue by region.",
+			"width": 960,
+			"height": 480
+		},
+		{
+			"id": "chart_3",
+			"chart_type": "histogram",
+			"title": "revenue Distribution",
+			"reason": "Histogram reveals distribution shape and extreme values.",
+			"x": "revenue",
+			"y": null,
+			"image_url": "/static/rpt_20260221_demo1234/chart_3.png",
+			"alt": "Histogram of revenue.",
+			"width": 960,
+			"height": 480
+		}
+	],
+	"insights": {
+		"executive_insights": [
+			{
+				"text": "Top-line growth is positive: revenue rose 12.4% over the period.",
+				"evidence": "trend.pct_change=12.4%"
+			},
+			{
+				"text": "Profitability risk: margin fell ~4.1% in Q3 while revenue grew, indicating cost pressure or discounting.",
+				"evidence": "margin_pct trend -4.1% (Q3)"
+			},
+			{
+				"text": "North region contributes the highest volume (420 records) and appears to be the primary growth driver.",
+				"evidence": "region top_value=North (420)"
+			},
+			{
+				"text": "Revenue has 18 high-end outliers; a small number of deals may be disproportionately impacting averages.",
+				"evidence": "revenue outliers (IQR)=18"
+			},
+			{
+				"text": "Late Q3 shows higher volatility; align supply and marketing cadence to stabilize performance.",
+				"evidence": "trend summary: volatility rose in late Q3"
+			}
+		],
+		"risks": [
+			{
+				"text": "Margin compression could continue if cost inflation persists.",
+				"evidence": "margin_pct decline in Q3"
+			},
+			{
+				"text": "Outlier-driven performance may mask underlying segment weakness.",
+				"evidence": "revenue outliers=18"
+			},
+			{
+				"text": "Regional dependency on North may increase exposure to local disruptions.",
+				"evidence": "North top frequency"
+			}
+		],
+		"opportunities": [
+			{
+				"text": "Run a pricing/discount audit for Q3 campaigns to restore margin.",
+				"evidence": "margin_pct down in Q3"
+			},
+			{
+				"text": "Replicate NorthΓÇÖs best-performing playbooks in underperforming regions.",
+				"evidence": "North leads revenue"
+			},
+			{
+				"text": "Create a 'large-deal' pipeline view to monitor outliers separately.",
+				"evidence": "revenue outliers=18"
+			}
+		],
+		"actions": [
+			{
+				"text": "Review cost drivers and discounting in Q3; set guardrails on promotions.",
+				"priority": "high"
+			},
+			{
+				"text": "Segment performance by region and product; prioritize fixes for lowest-margin segments.",
+				"priority": "high"
+			},
+			{
+				"text": "Add a large-deal flag and report separately to avoid average distortion.",
+				"priority": "medium"
+			}
+		]
+	},
+	"status": "complete",
+	"pipeline": [
+		{
+			"step": "validation",
+			"ok": true,
+			"ms": 110,
+			"note": "File encoding and delimiter validated"
+		},
+		{
+			"step": "cleaning",
+			"ok": true,
+			"ms": 360,
+			"note": "Dropped 1 empty column, filled 22 margin_pct values, removed 7 duplicates"
+		},
+		{
+			"step": "eda",
+			"ok": true,
+			"ms": 520,
+			"note": "Profiling and outlier detection completed"
+		},
+		{ "step": "charts", "ok": true, "ms": 430, "note": null },
+		{
+			"step": "llm",
+			"ok": true,
+			"ms": 2150,
+			"note": "Executive insights, risks, opportunities, and actions generated"
+		},
+		{ "step": "html", "ok": true, "ms": 90, "note": null },
+		{ "step": "pdf", "ok": true, "ms": 270, "note": null }
+	],
+	"artifacts": {
+		"report_json_url": "https://blob.example.com/reports/rpt_20260221_demo1234/report.json",
+		"report_html_url": "https://blob.example.com/reports/rpt_20260221_demo1234/report.html",
+		"pdf_url": "https://blob.example.com/reports/rpt_20260221_demo1234/report.pdf"
+	},
+	"quality_score": {
+		"score": 89,
+		"issues": ["18 high-end revenue outliers may skew averages"],
+		"strengths": [
+			"No missing values in KPI columns",
+			"Consistent revenue growth over the analyzed period"
+		]
+	},
+	"kpi_tiles": [
+		{
+			"label": "Total Revenue",
+			"value": "$135.4M",
+			"sublabel": "+12.4% vs prior period"
+		},
+		{
+			"label": "Average Margin %",
+			"value": "26.4%",
+			"sublabel": "-4.1 pts in Q3"
+		},
+		{
+			"label": "Top Region",
+			"value": "North",
+			"sublabel": "420 records (highest share)"
+		},
+		{
+			"label": "Revenue Outliers",
+			"value": "18 deals",
+			"sublabel": "Flagged via IQR"
+		}
+	],
+	"warnings": [
+		{
+			"code": "REVENUE_OUTLIERS",
+			"message": "Revenue distribution contains 18 high-end outliers that may distort averages."
+		},
+		{
+			"code": "MARGIN_DROP_Q3",
+			"message": "Margin percentage declined in Q3 while revenue increased."
+		}
+	],
+	"chat_context": {
+		"dataset_brief": "Daily revenue, cost, units, and margin percentage by region and product for a single quarter of sales.",
+		"evidence_pack": [
+			"Revenue increased 12.4% over the analyzed period.",
+			"Margin percentage declined around 4.1 points in Q3.",
+			"North region has the highest number of records (420) and leads revenue.",
+			"18 revenue outliers detected via IQR with an upper bound around 195,000."
+		],
+		"suggested_questions": [
+			"Which regions contribute most to revenue and margin?",
+			"How do margin trends differ by region and product?",
+			"What is the impact of outlier deals on overall performance?",
+			"Where should we focus to restore margin without hurting growth?"
+		]
+	}
+}

@@ -1,6 +1,6 @@
 # What’s Done vs What’s Left
 
-Branch: `feat7-trend-engine`
+Branch: `feat8-html-pdf`
 
 ## ✅ What’s Done
 
@@ -48,8 +48,7 @@ Branch: `feat7-trend-engine`
 - Backend data/AI logic:
   - Replace placeholder PNGs with real chart rendering via Plotly + Kaleido (or equivalent)
   - Implement Azure OpenAI integration (`llm_engine.py`) for insights, risks, opportunities, actions, chat_context
-  - Implement HTML report rendering (`report_renderer.py`) and PDF generation (`pdf_generator.py`) using WeasyPrint
-  - Wire `/pdf` to generate and return real A4 PDF
+  - Populate `status`, `pipeline`, `artifacts`, `quality_score`, `kpi_tiles`, and `warnings` from real processing
   - Populate `status`, `pipeline`, `artifacts`, `quality_score`, `kpi_tiles`, and `warnings` from real processing
 - Frontend:
   - Create Next.js app with upload page and report preview page
