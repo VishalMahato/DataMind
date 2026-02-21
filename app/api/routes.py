@@ -15,7 +15,7 @@ async def analyze(
     file: UploadFile = File(...),
     options: Optional[str] = Form(None),
 ) -> ReportResponse:
-    report = generate_report_from_file(file.file)
+    report = generate_report_from_file(file.file, file.filename)
     return report
 
 
