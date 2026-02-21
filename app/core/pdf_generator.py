@@ -40,6 +40,9 @@ def _generate_pdf_with_reportlab(report: ReportResponse, pdf_path: Path) -> None
         f"Rows: {report.dataset_meta.rows}  Columns: {report.dataset_meta.columns}",
     )
     y -= 12 * mm
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(20 * mm, y, "Executive Summary")
+    y -= 8 * mm
     if report.trend and report.trend.summary:
         c.setFont("Helvetica-Bold", 12)
         c.drawString(20 * mm, y, "Trend Summary")
@@ -51,7 +54,51 @@ def _generate_pdf_with_reportlab(report: ReportResponse, pdf_path: Path) -> None
             if y < 20 * mm:
                 c.showPage()
                 y = height - 20 * mm
+    if report.wow_findings:
+        y -= 4 * mm
+        if y < 30 * mm:
+            c.showPage()
+            y = height - 20 * mm
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(20 * mm, y, "Wow Findings")
+        y -= 8 * mm
+        c.setFont("Helvetica", 10)
+        for finding in report.wow_findings[:5]:
+            text = f"[{finding.severity.upper()}] {finding.title}"
+            c.drawString(25 * mm, y, text)
+            y -= 6 * mm
+            if y < 20 * mm:
+                c.showPage()
+                y = height - 20 * mm
     c.showPage()
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(20 * mm, height - 20 * mm, "Charts")
+    y = height - 32 * mm
+    c.setFont("Helvetica", 10)
+    for chart in report.charts:
+        image_path = STATIC_DIR / report.report_id / f"{chart.id}.png"
+        if not image_path.exists():
+            continue
+        if y < 60 * mm:
+            c.showPage()
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(20 * mm, height - 20 * mm, "Charts")
+            y = height - 32 * mm
+            c.setFont("Helvetica", 10)
+        c.drawString(20 * mm, y, chart.title)
+        y -= 6 * mm
+        img_width = width - 40 * mm
+        img_height = img_width / 2
+        c.drawImage(
+            str(image_path),
+            20 * mm,
+            y - img_height,
+            width=img_width,
+            height=img_height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        y -= img_height + 10 * mm
     c.save()
 
 
