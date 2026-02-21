@@ -1,6 +1,6 @@
 # What’s Done vs What’s Left
 
-Branch: `feat2-ingestion-meta-preview`
+Branch: `feat3-profiling`
 
 ## ✅ What’s Done
 
@@ -31,11 +31,13 @@ Branch: `feat2-ingestion-meta-preview`
   - Reads the uploaded CSV into a pandas DataFrame
   - Updates `dataset_meta` (filename, rows, columns, size_bytes, delimiter, encoding)
   - Updates `data_preview` columns and first rows from the real data
+ - Real profiling added in `app/core/data_processor.py`:
+  - Computes `missing_by_column` and `unique_by_column` from the DataFrame
+  - Builds `column_profiles` with inferred dtype, numeric stats, outlier summary, and top categorical values
 
 ## ⏳ What’s Left (High-Level)
 
 - Backend data/AI logic:
-  - Implement real profiling from the ingested DataFrame
   - Implement deterministic chart generation (`visualizer.py`) and PNG export via Plotly + Kaleido
   - Implement trend detection (`trend_engine.py`)
   - Implement Azure OpenAI integration (`llm_engine.py`) for insights, risks, opportunities, actions, chat_context
