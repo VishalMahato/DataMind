@@ -1,6 +1,6 @@
 # What’s Done vs What’s Left
 
-Branch: `feat5-static-images`
+Branch: `feat6-real-charts`
 
 ## ✅ What’s Done
 
@@ -39,12 +39,13 @@ Branch: `feat5-static-images`
   - Generates a line chart (KPI over time), bar chart (KPI by category), and histogram (KPI distribution) with stable ids and titles
 - Static chart images and serving added:
   - FastAPI mounts `/static` from the backend `static/` directory
-  - `chart_renderer.py` creates placeholder PNG files for each chart id under `static/{report_id}/`
+  - `chart_renderer.py` creates PNG files for each chart id under `static/{report_id}/`
+- Real chart rendering added in `app/core/chart_renderer.py`:
+  - Uses Plotly + Kaleido to render line, bar, and histogram charts from the DataFrame and chart specs
 
 ## ⏳ What’s Left (High-Level)
 
 - Backend data/AI logic:
-  - Replace placeholder PNGs with real chart rendering via Plotly + Kaleido (or equivalent)
   - Implement trend detection (`trend_engine.py`)
   - Implement Azure OpenAI integration (`llm_engine.py`) for insights, risks, opportunities, actions, chat_context
   - Implement HTML report rendering (`report_renderer.py`) and PDF generation (`pdf_generator.py`) using WeasyPrint
