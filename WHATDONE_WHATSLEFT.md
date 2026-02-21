@@ -1,6 +1,6 @@
 # What’s Done vs What’s Left
 
-Branch: `feat5-static-images`
+Branch: `feat7-trend-engine`
 
 ## ✅ What’s Done
 
@@ -40,12 +40,13 @@ Branch: `feat5-static-images`
 - Static chart images and serving added:
   - FastAPI mounts `/static` from the backend `static/` directory
   - `chart_renderer.py` creates placeholder PNG files for each chart id under `static/{report_id}/`
+- Trend engine added in `app/core/trend_engine.py` and wired via `data_processor`:
+  - Selects datetime and KPI columns, builds time series, computes start/end/pct_change and fills `trend` and `wow_findings` based on simple thresholds
 
 ## ⏳ What’s Left (High-Level)
 
 - Backend data/AI logic:
   - Replace placeholder PNGs with real chart rendering via Plotly + Kaleido (or equivalent)
-  - Implement trend detection (`trend_engine.py`)
   - Implement Azure OpenAI integration (`llm_engine.py`) for insights, risks, opportunities, actions, chat_context
   - Implement HTML report rendering (`report_renderer.py`) and PDF generation (`pdf_generator.py`) using WeasyPrint
   - Wire `/pdf` to generate and return real A4 PDF

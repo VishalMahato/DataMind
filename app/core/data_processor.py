@@ -17,6 +17,7 @@ from app.api.schemas import (
     TopValue,
 )
 from app.core.chart_renderer import render_charts
+from app.core.trend_engine import build_trend_and_findings
 from app.core.visualizer import generate_charts
 
 
@@ -161,10 +162,14 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
     )
     preview = _build_preview(df)
     profiling = _build_profiling(df)
+    trend, trend_findings = build_trend_and_findings(df)
     charts = generate_charts(df, report.report_id)
     render_charts(df, report.report_id, charts)
     report.dataset_meta = dataset_meta
     report.data_preview = preview
     report.profiling = profiling
+    report.trend = trend
+    existing_findings = list(report.wow_findings or [])
+    report.wow_findings = existing_findings + trend_findings
     report.charts = charts
     return report
