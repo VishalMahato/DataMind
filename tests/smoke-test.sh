@@ -6,7 +6,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
-CSV_PATH="${CSV_PATH:-sample.csv}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CSV_PATH="${CSV_PATH:-$SCRIPT_DIR/sample.csv}"
 PASS=0
 FAIL=0
 
@@ -232,14 +233,14 @@ assert_eq "empty CSV → HTTP 422" "$bad_csv_code" "422"
 rm -f "$tmp_bad_csv"
 
 # ─────────────────────────────────────────────────────────────
-# 6. POST /pdf (stub — expect 501)
+# 6. POST /pdf — requires report body (expect 400 without it)
 # ─────────────────────────────────────────────────────────────
 bold ""
-bold "6) POST /pdf — stub (501 expected)"
+bold "6) POST /pdf — missing report body (400 expected)"
 pdf_code="$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/pdf" \
   -H "Content-Type: application/json" \
   -d "{\"report_id\":\"$report_id\"}")"
-assert_eq "PDF stub → HTTP 501" "$pdf_code" "501"
+assert_eq "PDF missing report → HTTP 400" "$pdf_code" "400"
 
 # ─────────────────────────────────────────────────────────────
 # 7. Response schema completeness

@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class DatasetMeta(BaseModel):
@@ -80,6 +80,98 @@ class WowFinding(BaseModel):
     related_columns: List[str]
 
 
+# ── chart_data: aggregated payloads for frontend rendering ────────────
+
+
+class SeriesXYPoint(BaseModel):
+    """Single point in a time-series (line chart)."""
+    x: str = Field(..., description="ISO-8601 datetime string")
+    y: float
+
+
+class SeriesXYMeta(BaseModel):
+    xLabel: str
+    yLabel: str
+    unit: Optional[str] = None
+    granularity: Optional[Literal["minute", "hour", "day", "week", "month", "quarter", "year"]] = None
+
+
+class SeriesXYData(BaseModel):
+    """chart_data payload for line charts."""
+    format: Literal["series_xy"] = "series_xy"
+    data: List[SeriesXYPoint] = Field(..., max_length=500)
+    meta: SeriesXYMeta
+    sample_size: Optional[int] = Field(None, description="Number of source rows that contributed")
+
+
+class CategoryValuePoint(BaseModel):
+    """Single category slice (bar / pie chart)."""
+    category: str
+    value: float
+
+
+class CategoryValueMeta(BaseModel):
+    categoryLabel: str
+    valueLabel: str
+    agg: Literal["sum", "avg", "count", "min", "max"]
+    unit: Optional[str] = None
+
+
+class CategoryValueData(BaseModel):
+    """chart_data payload for bar and pie charts."""
+    format: Literal["category_value"] = "category_value"
+    data: List[CategoryValuePoint] = Field(..., max_length=200)
+    meta: CategoryValueMeta
+    sample_size: Optional[int] = None
+
+
+class BinPoint(BaseModel):
+    """Single histogram bin."""
+    bin_start: float
+    bin_end: float
+    count: int
+
+
+class BinsMeta(BaseModel):
+    valueLabel: str
+    bin_count: int
+
+
+class BinsData(BaseModel):
+    """chart_data payload for histogram charts."""
+    format: Literal["bins"] = "bins"
+    data: List[BinPoint] = Field(..., max_length=200)
+    meta: BinsMeta
+    sample_size: Optional[int] = None
+
+
+class XYPointRaw(BaseModel):
+    """Single point in a scatter plot."""
+    x: float
+    y: float
+
+
+class XYPointsMeta(BaseModel):
+    xLabel: str
+    yLabel: str
+    unitX: Optional[str] = None
+    unitY: Optional[str] = None
+    sampling: Optional[Literal["all", "random", "top"]] = None
+    max_points: Optional[int] = Field(None, le=500)
+
+
+class XYPointsData(BaseModel):
+    """chart_data payload for scatter charts."""
+    format: Literal["xy_points"] = "xy_points"
+    data: List[XYPointRaw] = Field(..., max_length=500)
+    meta: XYPointsMeta
+    sample_size: Optional[int] = None
+
+
+# Union discriminated by the 'format' field
+ChartDataPayload = Union[SeriesXYData, CategoryValueData, BinsData, XYPointsData]
+
+
 class ChartSpec(BaseModel):
     id: str
     chart_type: Literal["histogram", "bar", "pie", "line", "scatter", "heatmap"]
@@ -91,6 +183,11 @@ class ChartSpec(BaseModel):
     alt: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    chart_data: Optional[ChartDataPayload] = Field(
+        None,
+        description="Pre-aggregated data payload for frontend chart rendering. "
+                    "Falls back to image_url when absent.",
+    )
 
 
 class InsightItem(BaseModel):

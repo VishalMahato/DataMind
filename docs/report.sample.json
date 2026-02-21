@@ -222,7 +222,24 @@
       "image_url": "/static/rpt_20260221_demo1234/chart_1.png",
       "alt": "Line chart showing revenue increasing about 12.4% over the period.",
       "width": 960,
-      "height": 480
+      "height": 480,
+      "chart_data": {
+        "format": "series_xy",
+        "data": [
+          { "x": "2025-10-01T00:00:00", "y": 120000.0 },
+          { "x": "2025-10-02T00:00:00", "y": 98000.0 },
+          { "x": "2025-10-03T00:00:00", "y": 110500.0 },
+          { "x": "2025-10-04T00:00:00", "y": 87500.0 },
+          { "x": "2025-10-05T00:00:00", "y": 132000.0 }
+        ],
+        "meta": {
+          "xLabel": "date",
+          "yLabel": "revenue",
+          "unit": null,
+          "granularity": "day"
+        },
+        "sample_size": 1248
+      }
     },
     {
       "id": "chart_2",
@@ -234,7 +251,23 @@
       "image_url": "/static/rpt_20260221_demo1234/chart_2.png",
       "alt": "Bar chart comparing average revenue across North, South, East, and West regions.",
       "width": 960,
-      "height": 480
+      "height": 480,
+      "chart_data": {
+        "format": "category_value",
+        "data": [
+          { "category": "North", "value": 5400000.0 },
+          { "category": "East", "value": 4200000.0 },
+          { "category": "West", "value": 3800000.0 },
+          { "category": "South", "value": 3200000.0 }
+        ],
+        "meta": {
+          "categoryLabel": "region",
+          "valueLabel": "revenue",
+          "agg": "sum",
+          "unit": null
+        },
+        "sample_size": 1248
+      }
     },
     {
       "id": "chart_3",
@@ -246,7 +279,27 @@
       "image_url": "/static/rpt_20260221_demo1234/chart_3.png",
       "alt": "Histogram showing right-skewed revenue distribution with a long high-value tail.",
       "width": 960,
-      "height": 480
+      "height": 480,
+      "chart_data": {
+        "format": "bins",
+        "data": [
+          { "bin_start": 12000.0, "bin_end": 37650.0, "count": 42 },
+          { "bin_start": 37650.0, "bin_end": 63300.0, "count": 105 },
+          { "bin_start": 63300.0, "bin_end": 88950.0, "count": 268 },
+          { "bin_start": 88950.0, "bin_end": 114600.0, "count": 412 },
+          { "bin_start": 114600.0, "bin_end": 140250.0, "count": 238 },
+          { "bin_start": 140250.0, "bin_end": 165900.0, "count": 112 },
+          { "bin_start": 165900.0, "bin_end": 191550.0, "count": 48 },
+          { "bin_start": 191550.0, "bin_end": 217200.0, "count": 15 },
+          { "bin_start": 217200.0, "bin_end": 242850.0, "count": 6 },
+          { "bin_start": 242850.0, "bin_end": 265000.0, "count": 2 }
+        ],
+        "meta": {
+          "valueLabel": "revenue",
+          "bin_count": 10
+        },
+        "sample_size": 1248
+      }
     }
   ],
   "insights": {

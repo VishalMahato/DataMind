@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
-CSV_PATH="${CSV_PATH:-tests/sample.csv}"
+CSV_PATH="${CSV_PATH:-sample.csv}"
 OUTPUT_PDF="${OUTPUT_PDF:-feat8-test-report.pdf}"
 
 echo "Feat 8 HTML/PDF test"
