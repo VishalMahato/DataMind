@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -7,6 +8,9 @@ from app.api.routes import router as api_router
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+
+# Load .env file (if present) so OPENAI_API_KEY is available via os.getenv
+load_dotenv(BASE_DIR / ".env")
 
 app = FastAPI(title="Boardroom AI Backend")
 
