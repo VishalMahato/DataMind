@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import List
 
@@ -6,6 +7,8 @@ import plotly.graph_objects as go
 from PIL import Image
 
 from app.api.schemas import ChartSpec
+
+logger = logging.getLogger(__name__)
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -18,8 +21,19 @@ def _ensure_report_dir(report_id: str) -> Path:
     return report_dir
 
 
-def _create_placeholder_png(path: Path, width: int = 960, height: int = 480) -> None:
-    image = Image.new("RGB", (width, height), color=(32, 64, 160))
+def _create_placeholder_png(path: Path, label: str = "Chart unavailable", width: int = 960, height: int = 480) -> None:
+    from PIL import ImageDraw, ImageFont
+
+    image = Image.new("RGB", (width, height), color=(240, 240, 240))
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+    except Exception:
+        font = ImageFont.load_default()
+    text = f"⚠ {label}"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((width - tw) / 2, (height - th) / 2), text, fill=(120, 120, 120), font=font)
     image.save(path, format="PNG")
 
 
@@ -113,6 +127,7 @@ def render_charts(df: pd.DataFrame, report_id: str, charts: List[ChartSpec]) -> 
             continue
         try:
             _render_chart(df, chart, target)
-        except Exception:
-            _create_placeholder_png(target)
+        except Exception as exc:
+            logger.error("Chart %s render failed: %s — writing placeholder", chart.id, exc)
+            _create_placeholder_png(target, chart.title)
 

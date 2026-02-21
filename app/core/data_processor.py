@@ -1,5 +1,4 @@
 import io
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Optional
@@ -9,9 +8,13 @@ import pandas as pd
 from pandas.api import types as pdt
 
 from app.api.schemas import (
+    ActionItem,
+    CleaningLogItem,
     ColumnProfile,
     DataPreview,
     DatasetMeta,
+    InsightItem,
+    InsightPack,
     NumericStats,
     OutlierSummary,
     ProfilingSummary,
@@ -24,7 +27,6 @@ from app.core.visualizer import generate_charts
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-SAMPLE_REPORT_PATH = BASE_DIR / "docs" / "report.sample.json"
 
 
 def _read_dataframe(file_obj: BinaryIO) -> tuple[pd.DataFrame, int]:
@@ -115,49 +117,102 @@ def _build_profiling(df: pd.DataFrame) -> ProfilingSummary:
     )
 
 
+def _clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[CleaningLogItem]]:
+    """Clean the dataframe and return the cleaned df + a log of actions taken."""
+    log: list[CleaningLogItem] = []
+
+    # 1. Drop fully-empty rows
+    before_rows = len(df)
+    df = df.dropna(how="all")
+    after_rows = len(df)
+    dropped = before_rows - after_rows
+    if dropped:
+        log.append(CleaningLogItem(
+            action="drop_empty_rows",
+            description=f"Removed {dropped} completely empty row(s)",
+            before={"rows": before_rows},
+            after={"rows": after_rows},
+        ))
+
+    # 2. Drop fully-empty columns
+    before_cols = list(df.columns)
+    df = df.dropna(axis=1, how="all")
+    dropped_cols = set(before_cols) - set(df.columns)
+    if dropped_cols:
+        log.append(CleaningLogItem(
+            action="drop_empty_columns",
+            description=f"Removed empty column(s): {', '.join(sorted(dropped_cols))}",
+            before={"columns": len(before_cols)},
+            after={"columns": len(df.columns)},
+        ))
+
+    # 3. Drop duplicate rows
+    before_rows = len(df)
+    df = df.drop_duplicates()
+    after_rows = len(df)
+    dropped = before_rows - after_rows
+    if dropped:
+        log.append(CleaningLogItem(
+            action="drop_duplicates",
+            description=f"Removed {dropped} duplicate row(s)",
+            before={"rows": before_rows},
+            after={"rows": after_rows},
+        ))
+
+    # 4. Strip whitespace from string columns
+    str_cols = df.select_dtypes(include="object").columns.tolist()
+    if str_cols:
+        df[str_cols] = df[str_cols].apply(lambda c: c.str.strip())
+        log.append(CleaningLogItem(
+            action="strip_whitespace",
+            description=f"Trimmed whitespace in {len(str_cols)} text column(s)",
+            before={"columns": str_cols},
+            after={"columns": str_cols},
+        ))
+
+    # 5. Parse date-like columns
+    for col in df.columns:
+        if pdt.is_object_dtype(df[col]):
+            sample = df[col].dropna().head(20)
+            try:
+                parsed = pd.to_datetime(sample, infer_datetime_format=True)
+                if parsed.notna().all():
+                    df[col] = pd.to_datetime(df[col], infer_datetime_format=True)
+                    log.append(CleaningLogItem(
+                        action="parse_dates",
+                        description=f"Parsed column '{col}' as datetime",
+                        before={"dtype": "object"},
+                        after={"dtype": str(df[col].dtype)},
+                    ))
+            except (ValueError, TypeError):
+                pass
+
+    if not log:
+        log.append(CleaningLogItem(
+            action="no_action",
+            description="Dataset was already clean — no changes needed",
+            before={},
+            after={},
+        ))
+
+    return df, log
+
+
 def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None) -> ReportResponse:
-    if SAMPLE_REPORT_PATH.exists():
-        base_data = json.loads(SAMPLE_REPORT_PATH.read_text(encoding="utf-8"))
-    else:
-        base_data = {
-            "report_version": "v1",
-            "report_id": "rpt_placeholder",
-            "generated_at": "1970-01-01T00:00:00Z",
-            "mode": "boardroom",
-            "dataset_meta": {
-                "filename": "unknown.csv",
-                "rows": 0,
-                "columns": 0,
-                "size_bytes": 0,
-                "detected_delimiter": ",",
-                "encoding": "utf-8",
-            },
-            "data_preview": {"columns": [], "rows": []},
-            "cleaning_log": [],
-            "profiling": {
-                "missing_by_column": {},
-                "unique_by_column": {},
-                "column_profiles": [],
-            },
-            "trend": {"available": False},
-            "wow_findings": [],
-            "charts": [],
-            "insights": {
-                "executive_insights": [],
-                "risks": [],
-                "opportunities": [],
-                "actions": [],
-            },
-        }
-    report = ReportResponse.parse_obj(base_data)
     now = datetime.utcnow()
     report_id = f"rpt_{now:%Y%m%d_%H%M%S}_{uuid4().hex[:6]}"
-    report.report_id = report_id
-    report.generated_at = now.replace(microsecond=0).isoformat() + "Z"
+    generated_at = now.replace(microsecond=0).isoformat() + "Z"
+
+    # ── Read the uploaded file (raise on failure) ──────────────
     try:
         df, size_bytes = _read_dataframe(file_obj)
-    except Exception:
-        return report
+    except Exception as exc:
+        raise ValueError(f"Unable to read CSV: {exc}") from exc
+
+    # ── Clean ──────────────────────────────────────────────────
+    df, cleaning_log = _clean_dataframe(df)
+
+    # ── Metadata & profiling ──────────────────────────────────
     dataset_meta = DatasetMeta(
         filename=filename or "uploaded.csv",
         rows=int(df.shape[0]),
@@ -168,14 +223,33 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
     )
     preview = _build_preview(df)
     profiling = _build_profiling(df)
+
+    # ── Trends & wow findings ─────────────────────────────────
     trend, trend_findings = build_trend_and_findings(df)
-    charts = generate_charts(df, report.report_id)
-    render_charts(df, report.report_id, charts)
-    report.dataset_meta = dataset_meta
-    report.data_preview = preview
-    report.profiling = profiling
-    report.trend = trend
-    existing_findings = list(report.wow_findings or [])
-    report.wow_findings = existing_findings + trend_findings
-    report.charts = charts
-    return report
+
+    # ── Charts ────────────────────────────────────────────────
+    charts = generate_charts(df, report_id)
+    render_charts(df, report_id, charts)
+
+    # ── Insights (placeholder until LLM engine is wired) ─────
+    insights = InsightPack(
+        executive_insights=[],
+        risks=[],
+        opportunities=[],
+        actions=[],
+    )
+
+    return ReportResponse(
+        report_version="v1",
+        report_id=report_id,
+        generated_at=generated_at,
+        mode="boardroom",
+        dataset_meta=dataset_meta,
+        data_preview=preview,
+        cleaning_log=cleaning_log,
+        profiling=profiling,
+        trend=trend,
+        wow_findings=trend_findings,
+        charts=charts,
+        insights=insights,
+    )

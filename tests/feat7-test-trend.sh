@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
-CSV_PATH="${CSV_PATH:-tests/sample.csv}"
+CSV_PATH="${CSV_PATH:-sample.csv}"
 
 echo "Feat 7 trend engine test"
 echo "Backend: $BASE_URL"

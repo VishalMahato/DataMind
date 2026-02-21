@@ -247,7 +247,149 @@ Each profile:
   image_url    string                                                  Path to PNG file
   alt          string (optional)                                       Accessible description of chart
   width        number (optional)                                       Suggested width in pixels
-  height       number (optional)                                      Suggested height in pixels
+  height       number (optional)                                       Suggested height in pixels
+  chart_data   ChartDataPayload (optional)                             Pre-aggregated data for frontend rendering (see below)
+
+> **Fallback rule:** `image_url` is always populated for PDF rendering.
+> The frontend should prefer `chart_data` when present; fall back to
+> `<img src=image_url>` when `chart_data` is null.
+
+## 🔹 chart_data (ChartDataPayload)
+
+`chart_data` is a **discriminated union** keyed on the `format` field.
+Each format carries only the pre-aggregated / pre-bucketed data the
+frontend needs to draw the chart — **never the raw dataset**.
+
+### Safety constraints
+
+| Rule | Limit |
+|------|-------|
+| Max points per `series_xy` | 500 |
+| Max items per `category_value` | 200 |
+| Max bins per `bins` | 200 |
+| Max points per `xy_points` | 500 |
+| Target payload | ≤ 50 KB per chart |
+
+### A) `series_xy` — line charts (time series)
+
+``` json
+{
+  "format": "series_xy",
+  "data": [
+    { "x": "2026-01-01T00:00:00", "y": 120000 },
+    { "x": "2026-01-02T00:00:00", "y": 132000 }
+  ],
+  "meta": {
+    "xLabel": "date",
+    "yLabel": "revenue",
+    "unit": "INR",
+    "granularity": "day"
+  },
+  "sample_size": 1248
+}
+```
+
+  Field                Type                                             Description
+  -------------------- ------------------------------------------------ -----------
+  format               "series\_xy"                                     Discriminator
+  data\[\].x           string (ISO-8601)                                Datetime string
+  data\[\].y           number                                           Aggregated value
+  meta.xLabel          string                                           X-axis label
+  meta.yLabel          string                                           Y-axis label
+  meta.unit            string (optional)                                Value unit
+  meta.granularity     minute\|hour\|day\|week\|month\|quarter\|year    Time granularity
+  sample\_size         number (optional)                                Source rows
+
+### B) `category_value` — bar & pie charts
+
+``` json
+{
+  "format": "category_value",
+  "data": [
+    { "category": "North", "value": 5400000 },
+    { "category": "South", "value": 3200000 }
+  ],
+  "meta": {
+    "categoryLabel": "region",
+    "valueLabel": "revenue",
+    "agg": "sum",
+    "unit": "INR"
+  },
+  "sample_size": 1248
+}
+```
+
+  Field               Type                          Description
+  ------------------- ----------------------------- -----------
+  format              "category\_value"             Discriminator
+  data\[\].category   string                        Category name
+  data\[\].value      number                        Aggregated value
+  meta.categoryLabel  string                        Category axis label
+  meta.valueLabel     string                        Value axis label
+  meta.agg            sum\|avg\|count\|min\|max     Aggregation method
+  meta.unit           string (optional)             Value unit
+  sample\_size        number (optional)             Source rows
+
+### C) `bins` — histogram charts
+
+``` json
+{
+  "format": "bins",
+  "data": [
+    { "bin_start": 0, "bin_end": 50000, "count": 12 },
+    { "bin_start": 50000, "bin_end": 100000, "count": 48 }
+  ],
+  "meta": {
+    "valueLabel": "revenue",
+    "bin_count": 20
+  },
+  "sample_size": 1248
+}
+```
+
+  Field               Type              Description
+  ------------------- ----------------- -----------
+  format              "bins"            Discriminator
+  data\[\].bin\_start number            Lower edge (inclusive)
+  data\[\].bin\_end   number            Upper edge (exclusive)
+  data\[\].count      integer           Row count in this bin
+  meta.valueLabel     string            Column being bucketed
+  meta.bin\_count     integer           Total number of bins
+  sample\_size        number (optional) Source rows
+
+### D) `xy_points` — scatter charts
+
+``` json
+{
+  "format": "xy_points",
+  "data": [
+    { "x": 88000, "y": 120000 },
+    { "x": 74500, "y": 98000 }
+  ],
+  "meta": {
+    "xLabel": "cost",
+    "yLabel": "revenue",
+    "unitX": "INR",
+    "unitY": "INR",
+    "sampling": "random",
+    "max_points": 300
+  },
+  "sample_size": 1248
+}
+```
+
+  Field              Type                        Description
+  ------------------ --------------------------- -----------
+  format             "xy\_points"                Discriminator
+  data\[\].x         number                      X-axis value
+  data\[\].y         number                      Y-axis value
+  meta.xLabel        string                      X-axis label
+  meta.yLabel        string                      Y-axis label
+  meta.unitX         string (optional)           X-axis unit
+  meta.unitY         string (optional)           Y-axis unit
+  meta.sampling      all\|random\|top (optional) Sampling method used
+  meta.max\_points   number (optional)           Cap on points returned
+  sample\_size       number (optional)           Source rows
 
 ------------------------------------------------------------------------
 

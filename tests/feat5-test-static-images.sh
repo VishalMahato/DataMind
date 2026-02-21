@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
-CSV_PATH="${CSV_PATH:-tests/sample.csv}"
+CSV_PATH="${CSV_PATH:-sample.csv}"
 
 echo "Feat 5 static image test"
 echo "Backend: $BASE_URL"
