@@ -239,6 +239,100 @@ def generate_insights(
         )
 
 
+# ── KPI Tile suggestion ────────────────────────────────────────────────
+
+KPI_SYSTEM_PROMPT = """\
+You are **Boardroom AI**, a senior data analyst. Given a list of columns with their
+data types and summary statistics, decide which columns deserve a KPI tile on a
+dashboard and **what aggregation makes sense** for each.
+
+Respond with **valid JSON only** (no markdown, no commentary) matching this schema:
+{
+  "tiles": [
+    {
+      "column": "column_name",
+      "agg": "sum | mean | median | max | min | count | count_distinct | latest | range",
+      "label": "Human-friendly tile label",
+      "sublabel_agg": "mean | min | max | null"
+    }
+  ]
+}
+
+Guidelines (use column NAME and MEANING to decide):
+- Monetary / additive quantities (revenue, sales, cost, amount, profit, income, spend,
+  budget, price × quantity) → **sum**, sublabel_agg "mean".
+- Rates / percentages / ratios (margin_pct, conversion_rate, score, rating, growth_rate,
+  discount_pct) → **mean** (or **median**), sublabel_agg "max".
+- Counts / discrete units (units, orders, visits, users, tickets, items) → **sum**,
+  sublabel_agg "mean".
+- IDs, codes, serial numbers → **SKIP** (never create a tile for these).
+- Categorical text columns → You MAY create one tile with agg "count_distinct" if
+  it represents an important entity (e.g. "region", "product", "customer").
+- Date/datetime columns → **SKIP** (dates are not KPI-worthy).
+- If a column name is ambiguous, pick the most reasonable aggregation.
+- Return 3-8 tiles, ordered by business importance (most important first).
+- Do NOT invent column names that are not in the input.
+"""
+
+
+def generate_kpi_suggestions(
+    profiling: ProfilingSummary,
+    rows: int,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Ask GPT-4o-mini which columns deserve KPI tiles and what aggregation to use.
+
+    Returns a list of dicts like:
+        [{"column": "revenue", "agg": "sum", "label": "Total Revenue", "sublabel_agg": "mean"}, ...]
+    Returns None if LLM is unavailable.
+    """
+    try:
+        client = _get_client()
+    except RuntimeError as exc:
+        logger.warning("KPI suggestions skipped: %s", exc)
+        return None
+
+    # Build compact column info for the LLM
+    col_info = []
+    for cp in profiling.column_profiles:
+        entry: Dict[str, Any] = {"name": cp.name, "dtype": cp.dtype}
+        if cp.stats:
+            entry["stats"] = {
+                "min": cp.stats.min,
+                "max": cp.stats.max,
+                "mean": round(cp.stats.mean, 2),
+                "median": cp.stats.median,
+                "std": round(cp.stats.std, 2),
+            }
+        if cp.top_value:
+            entry["top_value"] = f"{cp.top_value.value} ({cp.top_value.count})"
+        entry["unique_count"] = profiling.unique_by_column.get(cp.name, 0)
+        col_info.append(entry)
+
+    user_msg = json.dumps({"rows": rows, "columns": col_info}, indent=2)
+
+    try:
+        logger.info("Calling %s for KPI tile suggestions", MODEL)
+        response = client.chat.completions.create(
+            model=MODEL,
+            temperature=0.2,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": KPI_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = json.loads(raw)
+        tiles = data.get("tiles", [])
+        logger.info("LLM suggested %d KPI tiles", len(tiles))
+        return tiles
+    except Exception as exc:
+        logger.error("KPI suggestion LLM call failed: %s", exc, exc_info=True)
+        return None
+
+
 # ── Chat Context generation ──────────────────────────────────────────
 
 CHAT_SYSTEM_PROMPT = """\
@@ -316,3 +410,86 @@ def generate_chat_context(
             evidence_pack=[],
             suggested_questions=[],
         )
+
+
+# ── Conversational Chat ───────────────────────────────────────────
+
+CHAT_CONVERSATION_PROMPT = """\
+You are **Boardroom AI**, a helpful data analyst chatbot. You answer questions
+about a dataset the user has uploaded and analysed.
+
+You are given:
+- A brief description of the dataset.
+- An evidence pack of key facts.
+- The conversation history so far.
+
+Rules:
+1. Answer ONLY based on the evidence provided. If you don\'t know, say so.
+2. Keep answers concise (under 150 words) unless the user asks for detail.
+3. Be professional but friendly.
+4. At the end, suggest 2-3 natural follow-up questions in a JSON field.
+
+Respond with **valid JSON only**:
+{
+  "reply": "Your answer here...",
+  "suggested_followups": ["follow-up 1?", "follow-up 2?"]
+}
+"""
+
+
+def chat_with_data(
+    message: str,
+    dataset_brief: str,
+    evidence_pack: List[str],
+    history: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    """
+    Have a conversation about the dataset using GPT-4o-mini.
+
+    Returns {"reply": str, "suggested_followups": list[str]}.
+    """
+    try:
+        client = _get_client()
+    except RuntimeError as exc:
+        return {
+            "reply": f"Chat unavailable: {exc}",
+            "suggested_followups": [],
+        }
+
+    # Build the system context with dataset info
+    context_block = f"""Dataset Summary:\n{dataset_brief}\n\nKey Facts:\n"""
+    for i, fact in enumerate(evidence_pack, 1):
+        context_block += f"{i}. {fact}\n"
+
+    messages = [
+        {"role": "system", "content": CHAT_CONVERSATION_PROMPT + "\n\n" + context_block},
+    ]
+
+    # Add conversation history (max last 20 turns)
+    for turn in history[-20:]:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+
+    # Add the current user message
+    messages.append({"role": "user", "content": message})
+
+    try:
+        logger.info("Chat call to %s (%d history turns)", MODEL, len(history))
+        response = client.chat.completions.create(
+            model=MODEL,
+            temperature=0.5,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+            messages=messages,
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = json.loads(raw)
+        return {
+            "reply": data.get("reply", ""),
+            "suggested_followups": data.get("suggested_followups", []),
+        }
+    except Exception as exc:
+        logger.error("Chat LLM call failed: %s", exc, exc_info=True)
+        return {
+            "reply": f"Sorry, I couldn't process your question: {exc}",
+            "suggested_followups": [],
+        }

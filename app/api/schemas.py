@@ -269,3 +269,26 @@ class PdfRequest(BaseModel):
     report_id: Optional[str] = None
     mode: Optional[Literal["boardroom", "analyst"]] = None
     report: Optional[ReportResponse] = None
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, description="The user's question")
+    chat_context: ChatContext = Field(..., description="The chat_context from the /analyze response")
+    history: List[ChatMessage] = Field(
+        default_factory=list,
+        description="Previous conversation turns (newest last). Max 20 messages.",
+        max_length=20,
+    )
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    suggested_followups: List[str] = Field(
+        default_factory=list,
+        description="2-3 suggested follow-up questions",
+    )

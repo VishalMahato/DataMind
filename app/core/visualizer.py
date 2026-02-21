@@ -25,12 +25,45 @@ DEFAULT_HISTOGRAM_BINS = 20
 
 
 def _select_numeric_column(df: pd.DataFrame) -> Optional[str]:
-    numeric_cols = [col for col in df.columns if pdt.is_numeric_dtype(df[col])]
+    """Pick the most analytically relevant numeric column, skipping IDs."""
+    # Skip columns that look like IDs or indexes
+    id_patterns = {"id", "_id", "index", "key", "pk", "code", "zip", "pin", "phone"}
+    numeric_cols = []
+    for col in df.columns:
+        if not pdt.is_numeric_dtype(df[col]):
+            continue
+        name_lower = str(col).lower().replace(" ", "_")
+        # Skip if it looks like an ID column
+        is_id = (
+            name_lower in id_patterns
+            or name_lower.endswith("_id")
+            or name_lower.endswith("_code")
+            or name_lower.startswith("id_")
+        )
+        # Also skip if all values are unique and monotonically increasing (likely a row ID)
+        series = df[col].dropna()
+        if not series.empty and is_id:
+            continue
+        if (
+            not series.empty
+            and series.nunique() == len(series)
+            and series.is_monotonic_increasing
+            and len(series) > 3
+        ):
+            continue
+        numeric_cols.append(str(col))
     if not numeric_cols:
         return None
-    for name in numeric_cols:
-        if str(name).lower() in {"revenue", "sales", "amount", "value"}:
-            return name
+    # Prefer columns matching business-relevant keywords
+    priority_keywords = [
+        "revenue", "sales", "amount", "total", "profit", "income",
+        "value", "price", "cost", "spend", "earning", "margin",
+        "quantity", "units", "count",
+    ]
+    for kw in priority_keywords:
+        for name in numeric_cols:
+            if kw in name.lower():
+                return name
     return numeric_cols[0]
 
 

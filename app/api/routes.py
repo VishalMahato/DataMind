@@ -5,8 +5,9 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.api.schemas import PdfRequest, ReportResponse
+from app.api.schemas import ChatRequest, ChatResponse, PdfRequest, ReportResponse
 from app.core.data_processor import generate_report_from_file
+from app.core.llm_engine import chat_with_data
 from app.core.pdf_generator import generate_report_pdf
 
 
@@ -53,3 +54,32 @@ async def generate_pdf(request: PdfRequest) -> FileResponse:
 @router.get("/health")
 async def health() -> JSONResponse:
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest) -> ChatResponse:
+    """Ask a follow-up question about the analysed dataset."""
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="message must not be empty")
+
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in request.history
+    ]
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None,
+        partial(
+            chat_with_data,
+            message=request.message,
+            dataset_brief=request.chat_context.dataset_brief,
+            evidence_pack=request.chat_context.evidence_pack,
+            history=history,
+        ),
+    )
+
+    return ChatResponse(
+        reply=result["reply"],
+        suggested_followups=result.get("suggested_followups", []),
+    )

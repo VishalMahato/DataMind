@@ -27,7 +27,7 @@ from app.api.schemas import (
     TopValue,
 )
 from app.core.chart_renderer import render_charts
-from app.core.llm_engine import generate_chat_context, generate_insights
+from app.core.llm_engine import generate_chat_context, generate_insights, generate_kpi_suggestions
 from app.core.report_renderer import render_report_html
 from app.core.trend_engine import build_trend_and_findings
 from app.core.visualizer import generate_charts
@@ -50,22 +50,55 @@ def _fmt_number(n: float) -> str:
     return f"{n:.2f}"
 
 
+_AGG_FUNCTIONS = {
+    "sum":            lambda s: float(s.sum(skipna=True)),
+    "mean":           lambda s: float(s.mean(skipna=True)),
+    "median":         lambda s: float(s.median(skipna=True)),
+    "max":            lambda s: float(s.max(skipna=True)),
+    "min":            lambda s: float(s.min(skipna=True)),
+    "count":          lambda s: int(s.count()),
+    "count_distinct": lambda s: int(s.nunique()),
+    "range":          lambda s: float(s.max(skipna=True) - s.min(skipna=True)),
+    "latest":         lambda s: float(s.dropna().iloc[-1]) if len(s.dropna()) else 0.0,
+}
+
+
+def _apply_agg(df: pd.DataFrame, column: str, agg: str) -> float:
+    """Safely apply an aggregation to a column."""
+    if column not in df.columns:
+        return 0.0
+    series = df[column]
+    fn = _AGG_FUNCTIONS.get(agg, _AGG_FUNCTIONS["sum"])
+    try:
+        return fn(series)
+    except Exception:
+        return 0.0
+
+
+def _sublabel_text(df: pd.DataFrame, column: str, sub_agg: str | None) -> str | None:
+    """Compute a sublabel value using a secondary aggregation."""
+    if not sub_agg or sub_agg == "null" or column not in df.columns:
+        return None
+    val = _apply_agg(df, column, sub_agg)
+    agg_label = sub_agg.replace("_", " ").title()
+    return f"{agg_label} {_fmt_number(val)}"
+
+
 def _build_kpi_tiles(
     df: pd.DataFrame,
     profiling: 'ProfilingSummary',
     trend: 'TrendSummary',
 ) -> list[KpiTile]:
-    """Derive summary KPI tiles from the dataset."""
+    """Build KPI tiles using LLM-decided aggregations per column."""
     tiles: list[KpiTile] = []
 
-    # 1. Total rows
+    # 1. Always include Total Rows + Data Completeness
     tiles.append(KpiTile(
         label="Total Rows",
         value=_fmt_number(len(df)),
         sublabel=f"{len(df.columns)} columns",
     ))
 
-    # 2. Missing values
     total_missing = sum(profiling.missing_by_column.values())
     total_cells = len(df) * len(df.columns)
     pct_missing = (total_missing / total_cells * 100) if total_cells else 0
@@ -75,37 +108,49 @@ def _build_kpi_tiles(
         sublabel=f"{total_missing} missing value(s)" if total_missing else "No missing values",
     ))
 
-    # 3. Numeric column summaries — pick the "most important" numeric col
-    #    Heuristic: prefer revenue > sales > amount > price > cost > first numeric
-    priority_keywords = ["revenue", "sales", "amount", "price", "cost", "total", "profit"]
-    numeric_profiles = [
-        cp for cp in profiling.column_profiles if cp.dtype == "numeric" and cp.stats
-    ]
-    chosen = None
-    for kw in priority_keywords:
-        for cp in numeric_profiles:
-            if kw in cp.name.lower():
-                chosen = cp
-                break
-        if chosen:
-            break
-    if not chosen and numeric_profiles:
-        chosen = numeric_profiles[0]
+    # 2. Ask LLM which columns to highlight and how to aggregate
+    suggestions = generate_kpi_suggestions(profiling, rows=len(df))
 
-    if chosen and chosen.stats:
-        col_name = chosen.name.replace("_", " ").title()
-        tiles.append(KpiTile(
-            label=f"Total {col_name}",
-            value=_fmt_number(chosen.stats.mean * len(df)),
-            sublabel=f"Avg {_fmt_number(chosen.stats.mean)}",
-        ))
-        tiles.append(KpiTile(
-            label=f"Max {col_name}",
-            value=_fmt_number(chosen.stats.max),
-            sublabel=f"Min {_fmt_number(chosen.stats.min)}",
-        ))
+    if suggestions:
+        valid_cols = set(str(c) for c in df.columns)
+        for item in suggestions[:6]:  # cap at 6 LLM tiles
+            col = item.get("column", "")
+            agg = item.get("agg", "sum")
+            label = item.get("label", col)
+            sub_agg = item.get("sublabel_agg")
 
-    # 4. Trend KPI (if available)
+            if col not in valid_cols:
+                continue
+            if agg == "count_distinct":
+                val = int(df[col].nunique())
+                tiles.append(KpiTile(
+                    label=label,
+                    value=_fmt_number(val),
+                    sublabel=None,
+                ))
+            else:
+                val = _apply_agg(df, col, agg)
+                sublabel = _sublabel_text(df, col, sub_agg)
+                tiles.append(KpiTile(
+                    label=label,
+                    value=_fmt_number(val),
+                    sublabel=sublabel,
+                ))
+    else:
+        # Fallback: heuristic when LLM unavailable
+        numeric_profiles = [
+            cp for cp in profiling.column_profiles if cp.dtype == "numeric" and cp.stats
+        ]
+        for cp in numeric_profiles[:3]:
+            col_name = cp.name.replace("_", " ").title()
+            actual_sum = float(df[cp.name].sum(skipna=True))
+            tiles.append(KpiTile(
+                label=f"Total {col_name}",
+                value=_fmt_number(actual_sum),
+                sublabel=f"Avg {_fmt_number(cp.stats.mean)}",
+            ))
+
+    # 3. Trend KPI (if available)
     if trend.available and trend.metrics:
         direction = "↑" if trend.metrics.pct_change >= 0 else "↓"
         tiles.append(KpiTile(
@@ -114,7 +159,7 @@ def _build_kpi_tiles(
             sublabel=f"{_fmt_number(trend.metrics.start_value)} → {_fmt_number(trend.metrics.end_value)}",
         ))
 
-    # 5. Outlier count
+    # 4. Outlier count
     total_outliers = sum(
         cp.outliers.count for cp in profiling.column_profiles
         if cp.outliers and cp.outliers.count > 0
@@ -154,6 +199,15 @@ def _infer_dtype(series: pd.Series) -> str:
     non_null = series.dropna()
     if non_null.empty:
         return "unknown"
+    # Check if string values look like dates before classifying as categorical
+    if pdt.is_string_dtype(series) or pdt.is_object_dtype(series):
+        sample = non_null.head(20)
+        try:
+            parsed = pd.to_datetime(sample, format="mixed", dayfirst=False)
+            if parsed.notna().all():
+                return "datetime"
+        except (ValueError, TypeError):
+            pass
     unique_count = non_null.nunique()
     if unique_count <= max(10, int(len(non_null) * 0.05)):
         return "categorical"
@@ -272,12 +326,12 @@ def _clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[CleaningLogIt
 
     # 5. Parse date-like columns
     for col in df.columns:
-        if pdt.is_object_dtype(df[col]):
+        if pdt.is_string_dtype(df[col]) or pdt.is_object_dtype(df[col]):
             sample = df[col].dropna().head(20)
             try:
-                parsed = pd.to_datetime(sample, infer_datetime_format=True)
+                parsed = pd.to_datetime(sample, format="mixed", dayfirst=False)
                 if parsed.notna().all():
-                    df[col] = pd.to_datetime(df[col], infer_datetime_format=True)
+                    df[col] = pd.to_datetime(df[col], format="mixed", dayfirst=False)
                     log.append(CleaningLogItem(
                         action="parse_dates",
                         description=f"Parsed column '{col}' as datetime",

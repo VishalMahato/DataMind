@@ -26,8 +26,35 @@ def build_trend_and_findings(df: pd.DataFrame) -> Tuple[TrendSummary, List[WowFi
     except Exception:
         trend = TrendSummary(available=False)
         return trend, []
-    start_value = float(data[kpi_col].iloc[0])
-    end_value = float(data[kpi_col].iloc[-1])
+
+    # Aggregate by date to handle transaction-level data correctly.
+    # If there are multiple values on the same date, sum them.
+    agg = data.groupby(date_col)[kpi_col].sum().reset_index()
+    agg = agg.sort_values(by=date_col)
+
+    if len(agg) < 2:
+        # Not enough distinct dates for a trend
+        start_value = float(agg[kpi_col].iloc[0]) if len(agg) == 1 else 0.0
+        trend = TrendSummary(
+            available=True,
+            date_column=date_col,
+            kpi_column=kpi_col,
+            summary=[f"Only {len(agg)} data point(s) — insufficient for trend analysis."],
+            metrics=TrendMetrics(
+                start_value=start_value,
+                end_value=start_value,
+                pct_change=0.0,
+            ),
+        )
+        return trend, []
+
+    # Compare first-period vs last-period aggregate
+    # For many distinct dates, average the first 10% and last 10% for stability
+    n = len(agg)
+    window = max(1, n // 10)  # at least 1 row
+    start_value = float(agg[kpi_col].iloc[:window].mean())
+    end_value = float(agg[kpi_col].iloc[-window:].mean())
+
     if start_value == 0:
         pct_change = 0.0
     else:
