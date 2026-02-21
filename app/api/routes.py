@@ -15,7 +15,18 @@ async def analyze(
     file: UploadFile = File(...),
     options: Optional[str] = Form(None),
 ) -> ReportResponse:
-    report = generate_report_from_file(file.file, file.filename)
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": {"code": "INVALID_CSV", "message": "Only .csv files are supported"}},
+        )
+    try:
+        report = generate_report_from_file(file.file, file.filename)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "CSV_PARSE_ERROR", "message": str(exc)}},
+        )
     return report
 
 
