@@ -1,4 +1,4 @@
-# Boardroom AI — The 10-Second Analyst
+# DataMind — The 10-Second Analyst
 
 Boardroom AI is an AI-powered data intelligence system that transforms raw CSV
 files into structured, executive-ready A4 PDF reports. It performs automatic
