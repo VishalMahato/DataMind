@@ -1,4 +1,5 @@
 import io
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, Optional
@@ -9,25 +10,123 @@ from pandas.api import types as pdt
 
 from app.api.schemas import (
     ActionItem,
+    Artifacts,
+    ChatContext,
     CleaningLogItem,
     ColumnProfile,
     DataPreview,
     DatasetMeta,
     InsightItem,
     InsightPack,
+    KpiTile,
     NumericStats,
     OutlierSummary,
+    PipelineStep,
     ProfilingSummary,
     ReportResponse,
     TopValue,
 )
 from app.core.chart_renderer import render_charts
-from app.core.llm_engine import generate_insights
+from app.core.llm_engine import generate_chat_context, generate_insights
+from app.core.report_renderer import render_report_html
 from app.core.trend_engine import build_trend_and_findings
 from app.core.visualizer import generate_charts
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+
+def _fmt_number(n: float) -> str:
+    """Format a number for display: 1234567 -> '1.23M', 1234 -> '1.23K', etc."""
+    abs_n = abs(n)
+    if abs_n >= 1_000_000_000:
+        return f"{n / 1_000_000_000:.2f}B"
+    if abs_n >= 1_000_000:
+        return f"{n / 1_000_000:.2f}M"
+    if abs_n >= 1_000:
+        return f"{n / 1_000:.2f}K"
+    if n == int(n):
+        return str(int(n))
+    return f"{n:.2f}"
+
+
+def _build_kpi_tiles(
+    df: pd.DataFrame,
+    profiling: 'ProfilingSummary',
+    trend: 'TrendSummary',
+) -> list[KpiTile]:
+    """Derive summary KPI tiles from the dataset."""
+    tiles: list[KpiTile] = []
+
+    # 1. Total rows
+    tiles.append(KpiTile(
+        label="Total Rows",
+        value=_fmt_number(len(df)),
+        sublabel=f"{len(df.columns)} columns",
+    ))
+
+    # 2. Missing values
+    total_missing = sum(profiling.missing_by_column.values())
+    total_cells = len(df) * len(df.columns)
+    pct_missing = (total_missing / total_cells * 100) if total_cells else 0
+    tiles.append(KpiTile(
+        label="Data Completeness",
+        value=f"{100 - pct_missing:.1f}%",
+        sublabel=f"{total_missing} missing value(s)" if total_missing else "No missing values",
+    ))
+
+    # 3. Numeric column summaries — pick the "most important" numeric col
+    #    Heuristic: prefer revenue > sales > amount > price > cost > first numeric
+    priority_keywords = ["revenue", "sales", "amount", "price", "cost", "total", "profit"]
+    numeric_profiles = [
+        cp for cp in profiling.column_profiles if cp.dtype == "numeric" and cp.stats
+    ]
+    chosen = None
+    for kw in priority_keywords:
+        for cp in numeric_profiles:
+            if kw in cp.name.lower():
+                chosen = cp
+                break
+        if chosen:
+            break
+    if not chosen and numeric_profiles:
+        chosen = numeric_profiles[0]
+
+    if chosen and chosen.stats:
+        col_name = chosen.name.replace("_", " ").title()
+        tiles.append(KpiTile(
+            label=f"Total {col_name}",
+            value=_fmt_number(chosen.stats.mean * len(df)),
+            sublabel=f"Avg {_fmt_number(chosen.stats.mean)}",
+        ))
+        tiles.append(KpiTile(
+            label=f"Max {col_name}",
+            value=_fmt_number(chosen.stats.max),
+            sublabel=f"Min {_fmt_number(chosen.stats.min)}",
+        ))
+
+    # 4. Trend KPI (if available)
+    if trend.available and trend.metrics:
+        direction = "↑" if trend.metrics.pct_change >= 0 else "↓"
+        tiles.append(KpiTile(
+            label=f"{trend.kpi_column or 'KPI'} Trend",
+            value=f"{direction} {abs(trend.metrics.pct_change):.1f}%",
+            sublabel=f"{_fmt_number(trend.metrics.start_value)} → {_fmt_number(trend.metrics.end_value)}",
+        ))
+
+    # 5. Outlier count
+    total_outliers = sum(
+        cp.outliers.count for cp in profiling.column_profiles
+        if cp.outliers and cp.outliers.count > 0
+    )
+    if total_outliers > 0:
+        tiles.append(KpiTile(
+            label="Outliers Detected",
+            value=str(total_outliers),
+            sublabel="Across all numeric columns",
+        ))
+
+    return tiles
 
 
 def _read_dataframe(file_obj: BinaryIO) -> tuple[pd.DataFrame, int]:
@@ -203,17 +302,36 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
     now = datetime.utcnow()
     report_id = f"rpt_{now:%Y%m%d_%H%M%S}_{uuid4().hex[:6]}"
     generated_at = now.replace(microsecond=0).isoformat() + "Z"
+    pipeline: list[PipelineStep] = []
 
-    # ── Read the uploaded file (raise on failure) ──────────────
+    # ── Read / validate the uploaded file ──────────────────────
+    t0 = time.perf_counter()
     try:
         df, size_bytes = _read_dataframe(file_obj)
+        pipeline.append(PipelineStep(
+            step="validation", ok=True,
+            ms=int((time.perf_counter() - t0) * 1000),
+            note=f"Parsed CSV: {df.shape[0]} rows × {df.shape[1]} cols",
+        ))
     except Exception as exc:
+        pipeline.append(PipelineStep(
+            step="validation", ok=False,
+            ms=int((time.perf_counter() - t0) * 1000),
+            note=str(exc),
+        ))
         raise ValueError(f"Unable to read CSV: {exc}") from exc
 
     # ── Clean ──────────────────────────────────────────────────
+    t0 = time.perf_counter()
     df, cleaning_log = _clean_dataframe(df)
+    pipeline.append(PipelineStep(
+        step="cleaning", ok=True,
+        ms=int((time.perf_counter() - t0) * 1000),
+        note=f"{len(cleaning_log)} action(s) applied",
+    ))
 
     # ── Metadata & profiling ──────────────────────────────────
+    t0 = time.perf_counter()
     dataset_meta = DatasetMeta(
         filename=filename or "uploaded.csv",
         rows=int(df.shape[0]),
@@ -227,12 +345,24 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
 
     # ── Trends & wow findings ─────────────────────────────────
     trend, trend_findings = build_trend_and_findings(df)
+    pipeline.append(PipelineStep(
+        step="eda", ok=True,
+        ms=int((time.perf_counter() - t0) * 1000),
+        note=f"Profiled {len(profiling.column_profiles)} columns, trend={'yes' if trend.available else 'no'}",
+    ))
 
     # ── Charts ────────────────────────────────────────────────
+    t0 = time.perf_counter()
     charts = generate_charts(df, report_id)
     render_charts(df, report_id, charts)
+    pipeline.append(PipelineStep(
+        step="charts", ok=True,
+        ms=int((time.perf_counter() - t0) * 1000),
+        note=f"Generated {len(charts)} chart(s)",
+    ))
 
     # ── LLM-powered Insights ─────────────────────────────────
+    t0 = time.perf_counter()
     chart_summaries = [
         {"chart_type": c.chart_type, "title": c.title}
         for c in charts
@@ -246,8 +376,32 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
         wow_findings=trend_findings,
         chart_summaries=chart_summaries,
     )
+    llm_ok = len(insights.executive_insights) > 0 and not any(
+        "unavailable" in i.text.lower() or "could not be generated" in i.text.lower()
+        for i in insights.executive_insights
+    )
+    pipeline.append(PipelineStep(
+        step="llm", ok=llm_ok,
+        ms=int((time.perf_counter() - t0) * 1000),
+        note="GPT-4o-mini insights generated" if llm_ok else "LLM skipped or failed",
+    ))
 
-    return ReportResponse(
+    # ── KPI Tiles ─────────────────────────────────────────────
+    kpi_tiles = _build_kpi_tiles(df, profiling, trend)
+
+    # ── Chat Context (LLM-powered) ───────────────────────────
+    chat_context = generate_chat_context(
+        filename=filename or "uploaded.csv",
+        rows=int(df.shape[0]),
+        columns=int(df.shape[1]),
+        profiling=profiling,
+        trend=trend,
+        wow_findings=trend_findings,
+        chart_summaries=chart_summaries,
+    )
+
+    # ── Build report (without artifacts first) ─────────────
+    report = ReportResponse(
         report_version="v1",
         report_id=report_id,
         generated_at=generated_at,
@@ -260,4 +414,30 @@ def generate_report_from_file(file_obj: BinaryIO, filename: Optional[str] = None
         wow_findings=trend_findings,
         charts=charts,
         insights=insights,
+        pipeline=pipeline,
+        kpi_tiles=kpi_tiles,
+        chat_context=chat_context,
     )
+
+    # ── Artifacts: save JSON + HTML to static/ ─────────────
+    report_dir = BASE_DIR / "static" / report_id
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = report_dir / "report.json"
+    json_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+
+    html_path = report_dir / "report.html"
+    try:
+        html_content = render_report_html(report)
+        html_path.write_text(html_content, encoding="utf-8")
+        html_url = f"/static/{report_id}/report.html"
+    except Exception:
+        html_url = None
+
+    report.artifacts = Artifacts(
+        report_json_url=f"/static/{report_id}/report.json",
+        report_html_url=html_url,
+        pdf_url=None,  # Generated on-demand via POST /pdf
+    )
+
+    return report

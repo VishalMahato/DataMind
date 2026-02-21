@@ -14,6 +14,7 @@ from openai import OpenAI
 
 from app.api.schemas import (
     ActionItem,
+    ChatContext,
     InsightItem,
     InsightPack,
     ProfilingSummary,
@@ -235,4 +236,83 @@ def generate_insights(
             risks=[],
             opportunities=[],
             actions=[],
+        )
+
+
+# ── Chat Context generation ──────────────────────────────────────────
+
+CHAT_SYSTEM_PROMPT = """\
+You are **Boardroom AI**, a senior data analyst. Given a structured data summary,
+produce a chat context that helps a user ask follow-up questions about their dataset.
+
+Respond with **valid JSON only** (no markdown, no commentary) matching this schema:
+{
+  "dataset_brief": "A 2-3 sentence plain-English summary of the dataset.",
+  "evidence_pack": ["key fact 1", "key fact 2", ...],
+  "suggested_questions": ["question 1?", "question 2?", ...]
+}
+
+Rules:
+1. dataset_brief: 2-3 sentences summarising what the data contains and its key characteristics.
+2. evidence_pack: 4-8 bullet facts drawn directly from the data context (trends, outliers, top values).
+3. suggested_questions: 4-6 natural-language questions a business user might ask about this data.
+4. Do NOT invent data values that are not in the context.
+"""
+
+
+def generate_chat_context(
+    filename: str,
+    rows: int,
+    columns: int,
+    profiling: ProfilingSummary,
+    trend: TrendSummary,
+    wow_findings: List[WowFinding],
+    chart_summaries: List[Dict[str, str]],
+) -> ChatContext:
+    """
+    Call GPT-4o-mini to generate a ChatContext with dataset_brief,
+    evidence_pack, and suggested_questions.
+
+    Returns a fallback ChatContext if the API key is missing or the call fails.
+    """
+    try:
+        client = _get_client()
+    except RuntimeError as exc:
+        logger.warning("Chat context skipped: %s", exc)
+        return ChatContext(
+            dataset_brief="Chat context unavailable — OPENAI_API_KEY not configured.",
+            evidence_pack=[],
+            suggested_questions=[],
+        )
+
+    context = _build_data_context(
+        filename, rows, columns, profiling, trend, wow_findings, chart_summaries
+    )
+    user_message = json.dumps(context, indent=2, default=str)
+
+    try:
+        logger.info("Calling %s for chat context", MODEL)
+        response = client.chat.completions.create(
+            model=MODEL,
+            temperature=TEMPERATURE,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = json.loads(raw)
+        return ChatContext(
+            dataset_brief=data.get("dataset_brief", ""),
+            evidence_pack=data.get("evidence_pack", []),
+            suggested_questions=data.get("suggested_questions", []),
+        )
+    except Exception as exc:
+        logger.error("Chat context LLM call failed: %s", exc, exc_info=True)
+        return ChatContext(
+            dataset_brief=f"Could not generate chat context: {exc}",
+            evidence_pack=[],
+            suggested_questions=[],
         )
